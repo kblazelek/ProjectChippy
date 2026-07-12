@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "project-chippy"
+version = "0.1.0"
+description = "Project utilizing Raspberry Pi to detect squirrels and dispensing the nuts remotely"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "requests",
+    "ultralytics",
+    "picamera2",
+    "Flask",
+    "onnx",
+    "onnxruntime",
+    "ollama",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Data captured (e.g. photos)
+data/
+
+# Models for machine learning
+models/
