@@ -5,10 +5,10 @@ import cv2
 import requests
 from ultralytics import YOLO
 from picamera2 import Picamera2
+from project_chippy.notifications.ntfy import send_wildlife_notification
 from project_chippy.core.config import (
     MODEL_PATH,
     SAVE_DIR,
-    TOPIC,
     COOLDOWN_SECONDS,
     NOTIFICATION_COOLDOWN_SECONDS
 )
@@ -86,33 +86,17 @@ def run_detection_loop(state):
 
                 state.last_save_time = current_time
 
-            # --- HANDLE NOTIFICATIONS (Using state.last_notification_time) ---
+            # --- HANDLE NOTIFICATIONS
             if animal_detected and (current_time - state.last_notification_time) > NOTIFICATION_COOLDOWN_SECONDS:
-                notification_url = f"https://ntfy.sh/{TOPIC}"
-                message = f"Detected animals: {', '.join(sorted(set(detected_labels)))} at {timestamp}"
+                notification_sent = send_wildlife_notification(
+                    annotated_frame=annotated_frame, 
+                    detected_labels=detected_labels, 
+                    timestamp=timestamp
+                )
                 
-                try:
-                    _, encoded_image = cv2.imencode(".jpg", annotated_frame)
-                    headers = {
-                        "Title": "Wildlife update",
-                        "Filename": "animal.jpg",
-                        "Message": message,
-                    }
-
-                    response = requests.put(
-                        notification_url,
-                        data=encoded_image.tobytes(),
-                        headers=headers,
-                        timeout=10,
-                    )
-
-                    if response.status_code in (200, 201, 202):
-                        print(f"🔔 Notification sent to {notification_url}")
-                        state.last_notification_time = current_time
-                    else:
-                        print(f"⚠️ Notification failed ({response.status_code}): {response.text}")
-                except Exception as exc:
-                    print(f"⚠️ Notification error: {exc}")
+                # Only reset the cooldown timer if it successfully sent
+                if notification_sent:
+                    state.last_notification_time = current_time
 
             time.sleep(0.1)
 
