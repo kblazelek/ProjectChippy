@@ -19,24 +19,25 @@ def run_detection_loop(state):
     Reads from the camera, runs inference, updates the shared state,
     and handles saving/notifications based on cooldowns.
     """
-    picam2 = Picamera2()
-    config = picam2.create_video_configuration(main={"size": (640, 480)})
-    picam2.configure(config)
-    picam2.start()
-
-    if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
-
-    model = YOLO(MODEL_PATH, task="detect")
-    print(f"Starting wildlife detection with model: {MODEL_PATH}")
-
+    picam2 = None
     try:
-        while True:
+        picam2 = Picamera2()
+        config = picam2.create_video_configuration(main={"size": (640, 480)})
+        picam2.configure(config)
+        picam2.start()
+
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
+
+        model = YOLO(MODEL_PATH, task="detect")
+        print(f"Starting wildlife detection with model: {MODEL_PATH}")
+
+        while not state.detector_stop_event.is_set():
             frame = picam2.capture_array()
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             results = model(frame, stream=True, conf=state.model_confidence_threshold)
             result = next(results, None)
-            
+
             if result is None:
                 continue
 
@@ -103,7 +104,11 @@ def run_detection_loop(state):
     except KeyboardInterrupt:
         print("Stopping script...")
     finally:
-        try:
-            picam2.stop()
-        except Exception:
-            pass
+        state.detector_enabled = False
+        if picam2 is not None:
+            try:
+                picam2.stop()   # Stops the capture stream
+                picam2.close()  # RELEASES THE HARDWARE
+                print("Camera resources released successfully.")
+            except Exception as e:
+                print(f"Error closing camera: {e}")
