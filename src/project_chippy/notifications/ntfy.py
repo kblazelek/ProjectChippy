@@ -2,6 +2,42 @@ import cv2
 import requests
 from project_chippy.core.config import TOPIC
 
+
+def sanitize_header_value(value):
+    """Convert a header value to ASCII-safe text so requests can send it."""
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="replace")
+    return str(value).encode("ascii", errors="replace").decode("ascii")
+
+
+def send_text_notification(title, message):
+    """Send a plain-text notification to the configured ntfy topic."""
+    notification_url = f"https://ntfy.sh/{TOPIC}"
+    headers = {
+        "Title": sanitize_header_value(title),
+        "Message": sanitize_header_value(message),
+    }
+
+    try:
+        response = requests.post(
+            notification_url,
+            data=message.encode("utf-8"),
+            headers=headers,
+            timeout=10,
+        )
+
+        if response.status_code in (200, 201, 202):
+            print(f"🔔 Text notification sent to {notification_url}")
+            return True
+        print(f"⚠️ Text notification failed ({response.status_code}): {response.text}")
+        return False
+    except Exception as exc:
+        print(f"⚠️ Text notification error: {exc}")
+        return False
+
+
 def send_wildlife_notification(annotated_frame, detected_labels, timestamp):
     """
     Encodes the image and sends a push notification via ntfy.sh.
@@ -18,9 +54,9 @@ def send_wildlife_notification(annotated_frame, detected_labels, timestamp):
         _, encoded_image = cv2.imencode(".jpg", annotated_frame)
 
         headers = {
-            "Title": "Wildlife update",
-            "Filename": "animal.jpg",
-            "Message": message,
+            "Title": sanitize_header_value("Wildlife update"),
+            "Filename": sanitize_header_value("animal.jpg"),
+            "Message": sanitize_header_value(message),
         }
 
         response = requests.put(
