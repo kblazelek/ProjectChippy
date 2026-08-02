@@ -5,6 +5,7 @@ import cv2
 import requests
 from ultralytics import YOLO
 from picamera2 import Picamera2
+from project_chippy.db.queries import save_detection
 from project_chippy.notifications.ntfy import send_wildlife_notification
 from project_chippy.core.config import (
     MODEL_PATH,
@@ -12,6 +13,33 @@ from project_chippy.core.config import (
     COOLDOWN_SECONDS,
     NOTIFICATION_COOLDOWN_SECONDS
 )
+
+def build_detection_payload(detected_classes, detected_confidences, names_dict, boxes):
+    """Convert YOLO results into the shape expected by save_detection."""
+    payload = []
+    for index, class_id in enumerate(detected_classes):
+        confidence = detected_confidences[index] if index < len(detected_confidences) else 1.0
+        bbox = []
+        if boxes is not None and index < len(boxes):
+            bbox = [float(value) for value in boxes[index]]
+
+        payload.append(
+            {
+                "class": names_dict[int(class_id)],
+                "confidence": float(confidence),
+                "bbox": bbox,
+            }
+        )
+    return payload
+
+
+def persist_detection(image_path, detections):
+    """Persist a saved detection image and its detections to the database."""
+    try:
+        save_detection(image_path, detections)
+    except Exception as exc:
+        print(f"Database save failed: {exc}")
+
 
 def run_detection_loop(state):
     """
@@ -49,15 +77,19 @@ def run_detection_loop(state):
             animal_detected = len(detected_classes) > 0
             detected_labels = []
             saveable_detection = False
-
-            for class_id, confidence in zip(
+            detection_payload = build_detection_payload(
                 detected_classes,
-                detected_confidences if len(detected_confidences) > 0 else [1.0] * len(detected_classes),
-            ):
-                label = names_dict[int(class_id)]
+                detected_confidences,
+                names_dict,
+                boxes.xyxy if boxes is not None else None,
+            )
+
+            for detection in detection_payload:
+                label = detection["class"]
+                confidence = detection["confidence"]
                 print(f"Detected: {label} (conf={float(confidence):.2f})")
                 detected_labels.append(label)
-                
+
                 # Check against the dynamic save threshold in the shared state
                 if float(confidence) >= state.save_confidence_threshold:
                     saveable_detection = True
@@ -85,6 +117,7 @@ def run_detection_loop(state):
                 cv2.imwrite(annotated_filepath, annotated_frame)
                 print(f"📸 SUCCESS: Saved {annotated_filename} to {SAVE_DIR}/")
 
+                persist_detection(raw_filepath, detection_payload)
                 state.last_save_time = current_time
 
             # --- HANDLE NOTIFICATIONS
