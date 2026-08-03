@@ -3,6 +3,33 @@ import requests
 from project_chippy.core.config import TOPIC
 
 
+def send_image_notification(title, image_bytes, filename, message):
+    """Send an image attachment to the configured ntfy topic."""
+    notification_url = f"https://ntfy.sh/{TOPIC}"
+    headers = {
+        "Title": sanitize_header_value(title),
+        "Filename": sanitize_header_value(filename),
+        "Message": sanitize_header_value(message),
+    }
+
+    try:
+        response = requests.post(
+            notification_url,
+            data=image_bytes,
+            headers=headers,
+            timeout=10,
+        )
+
+        if response.status_code in (200, 201, 202):
+            print(f"🔔 Image notification sent to {notification_url}")
+            return True
+        print(f"⚠️ Image notification failed ({response.status_code}): {response.text}")
+        return False
+    except Exception as exc:
+        print(f"⚠️ Image notification error: {exc}")
+        return False
+
+
 def sanitize_header_value(value):
     """Convert a header value to ASCII-safe text without line breaks or control characters."""
     if value is None:

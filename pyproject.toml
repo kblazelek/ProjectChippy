@@ -16,6 +16,7 @@ dependencies = [
     "onnx",
     "onnxruntime",
     "ollama",
+    "matplotlib",
 ]
 
 [tool.setuptools]
