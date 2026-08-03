@@ -1,5 +1,7 @@
 import os
 import sys
+from collections import Counter
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -9,6 +11,7 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+from project_chippy.db.queries import get_detections_for_day
 from project_chippy.notifications.ntfy import send_text_notification
 
 
@@ -51,12 +54,41 @@ def generate_squirrel_fact():
 
 def send_squirrel_fact_notification():
     """Generate a squirrel fact and send it through ntfy."""
-    fact = generate_squirrel_fact()
+    fact = generate_squirrel_fact() or "No squirrel fact available today."
     title = "Squirrel fact"
     return send_text_notification(title, fact)
 
 
+def build_daily_activity_report(detections, target_date_str):
+    """Summarize how many detections of each animal happened on a given day."""
+    counts = Counter(
+        detection.get("animal_class")
+        for detection in detections
+        if detection.get("animal_class")
+    )
+
+    title = f"Daily animal activity for {target_date_str}"
+    if not counts:
+        return f"{title}:\nNo animal detections recorded."
+
+    lines = [title]
+    for animal_name, count in sorted(counts.items()):
+        lines.append(f"- {animal_name}: {count}")
+    return "\n".join(lines)
+
+
+def send_daily_activity_report(target_date_str=None):
+    """Send a notification summarizing detections recorded on the given day."""
+    if target_date_str is None:
+        target_date_str = datetime.now().strftime("%Y-%m-%d")
+
+    detections = get_detections_for_day(target_date_str)
+    report = build_daily_activity_report(detections, target_date_str)
+    return send_text_notification("Daily animal activity", report)
+
+
 if __name__ == "__main__":
     stop_detector_loop()
-    send_squirrel_fact_notification()
+    # send_squirrel_fact_notification()
+    send_daily_activity_report()
     print("Daily summary generated.")

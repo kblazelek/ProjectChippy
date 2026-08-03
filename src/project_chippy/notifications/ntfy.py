@@ -4,12 +4,14 @@ from project_chippy.core.config import TOPIC
 
 
 def sanitize_header_value(value):
-    """Convert a header value to ASCII-safe text so requests can send it."""
+    """Convert a header value to ASCII-safe text without line breaks or control characters."""
     if value is None:
         return ""
     if isinstance(value, bytes):
         value = value.decode("utf-8", errors="replace")
-    return str(value).encode("ascii", errors="replace").decode("ascii")
+
+    text = str(value).encode("ascii", errors="replace").decode("ascii")
+    return " ".join(text.split())
 
 
 def send_text_notification(title, message):
@@ -17,7 +19,6 @@ def send_text_notification(title, message):
     notification_url = f"https://ntfy.sh/{TOPIC}"
     headers = {
         "Title": sanitize_header_value(title),
-        "Message": sanitize_header_value(message),
     }
 
     try:
