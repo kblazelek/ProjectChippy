@@ -41,10 +41,22 @@ def initialize_database():
             cursor.execute("PRAGMA user_version = 1")
             print("Database initialized to Version 1.")
 
-        # Version 1 -> Version 2: Future Migrations (e.g., adding temperature)
+        # Version 1 -> Version 2: Store conversation history for LLM prompts
         if version < 2:
-            # cursor.execute("ALTER TABLE captured_images ADD COLUMN temperature REAL")
-            # cursor.execute("PRAGMA user_version = 2")
-            pass
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS conversation_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    conversation_key TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_conversation_messages_key_created_at
+                ON conversation_messages(conversation_key, created_at)
+            ''')
+            cursor.execute("PRAGMA user_version = 2")
+            print("Database initialized to Version 2.")
 
         conn.commit()

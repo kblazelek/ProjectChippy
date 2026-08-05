@@ -2,6 +2,40 @@ import datetime
 from typing import List, Dict, Any
 from .connection import get_connection
 
+
+def save_conversation_message(conversation_key: str, role: str, content: str) -> int:
+    """Store one message in the conversation history table."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO conversation_messages (conversation_key, role, content)
+            VALUES (?, ?, ?)
+            """,
+            (conversation_key, role, content),
+        )
+        return cursor.lastrowid
+
+
+def get_recent_conversation_messages(conversation_key: str, limit: int = 6) -> List[Dict[str, Any]]:
+    """Retrieve the most recent messages for a conversation, in chronological order."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT role, content, created_at
+            FROM conversation_messages
+            WHERE conversation_key = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (conversation_key, limit),
+        )
+        rows = cursor.fetchall()
+
+    return [dict(row) for row in reversed(rows)]
+
+
 def save_detection(image_path: str, detections: List[Dict[str, Any]]) -> int:
     """
     Saves a captured image and all animals detected within it.

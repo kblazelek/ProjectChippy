@@ -1,9 +1,11 @@
 import io
 import os
+import random
 import sys
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import matplotlib
 matplotlib.use("Agg")
@@ -15,7 +17,11 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from project_chippy.db.queries import get_detections_for_day
+from project_chippy.db.queries import (
+    get_detections_for_day,
+    get_recent_conversation_messages,
+    save_conversation_message,
+)
 from project_chippy.notifications.ntfy import send_image_notification, send_text_notification
 
 
@@ -37,11 +43,35 @@ def stop_detector_loop():
 
 def generate_squirrel_fact():
     """Generate a short, interesting squirrel fact using a local Ollama model."""
+    conversation_key = "squirrel_fact_daily"
+    history = get_recent_conversation_messages(conversation_key, limit=4)
+
+    if history:
+        history_text = "\n".join(
+            f"{message['role']}: {message['content']}" for message in history
+        )
+        prompt = (
+            f"Previous conversation:\n{history_text}\n\n"
+            "Give me one fresh, interesting fact about squirrels in one sentence. "
+            "Make it original and avoid repeating the same wording."
+        )
+    else:
+        prompt = (
+            "Give me one fresh, interesting fact about squirrels in one sentence. "
+            "Make it original and avoid repeating the same wording."
+        )
+
     url = "http://localhost:11434/api/generate"
     payload = {
         "model": "gemma4:e4b",
-        "prompt": "Give me one interesting fact about squirrels in one sentence.",
+        "prompt": prompt,
         "stream": False,
+        "options": {
+            "temperature": 1.2,
+            "top_p": 0.95,
+            "repeat_penalty": 1.1,
+            "seed": random.randint(1, 1000000),
+        },
     }
 
     try:
@@ -50,6 +80,8 @@ def generate_squirrel_fact():
         data = response.json()
         fact = (data.get("response") or "").strip()
         if fact:
+            save_conversation_message(conversation_key, "user", prompt)
+            save_conversation_message(conversation_key, "assistant", fact)
             return fact
     except requests.RequestException as exc:
         print(f"Could not generate squirrel fact: {exc}")
@@ -96,6 +128,7 @@ def send_daily_activity_report(target_date_str=None, detections=None):
 def build_hourly_activity_chart(detections, target_date_str):
     """Create a stacked bar chart of captures grouped by hour and animal type."""
     hourly_counts = Counter()
+    uk_timezone = ZoneInfo("Europe/London")
 
     for detection in detections:
         timestamp = detection.get("timestamp")
@@ -108,7 +141,13 @@ def build_hourly_activity_chart(detections, target_date_str):
         except ValueError:
             continue
 
-        hourly_counts[(parsed_timestamp.hour, str(animal_class))] += 1
+        if parsed_timestamp.tzinfo is None:
+            parsed_timestamp = parsed_timestamp.replace(tzinfo=timezone.utc)
+        else:
+            parsed_timestamp = parsed_timestamp.astimezone(timezone.utc)
+
+        uk_timestamp = parsed_timestamp.astimezone(uk_timezone)
+        hourly_counts[(uk_timestamp.hour, str(animal_class))] += 1
 
     animals = sorted({animal for _, animal in hourly_counts.keys()})
     hours = [f"{hour:02d}:00" for hour in range(24)]
@@ -162,7 +201,7 @@ def send_daily_activity_chart(target_date_str=None, detections=None):
 
 if __name__ == "__main__":
     stop_detector_loop()
-    # send_squirrel_fact_notification()
+    send_squirrel_fact_notification()
     target_date_str = datetime.now().strftime("%Y-%m-%d")
     detections = get_detections_for_day(target_date_str)
     send_daily_activity_report(target_date_str, detections)
