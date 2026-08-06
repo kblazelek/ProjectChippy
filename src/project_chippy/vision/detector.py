@@ -1,4 +1,5 @@
 import os
+import threading
 import time
 from datetime import datetime
 import cv2
@@ -122,15 +123,13 @@ def run_detection_loop(state):
 
             # --- HANDLE NOTIFICATIONS
             if animal_detected and (current_time - state.last_notification_time) > NOTIFICATION_COOLDOWN_SECONDS:
-                notification_sent = send_wildlife_notification(
-                    annotated_frame=annotated_frame, 
-                    detected_labels=detected_labels, 
-                    timestamp=timestamp
+                state.last_notification_time = current_time
+                notification_thread = threading.Thread(
+                    target=send_wildlife_notification,
+                    args=(annotated_frame.copy(), detected_labels, timestamp),
+                    daemon=True,
                 )
-                
-                # Only reset the cooldown timer if it successfully sent
-                if notification_sent:
-                    state.last_notification_time = current_time
+                notification_thread.start()
 
             time.sleep(0.1)
 
