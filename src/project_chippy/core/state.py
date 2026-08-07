@@ -9,6 +9,11 @@ class AppState:
         self.save_confidence_threshold = 0.6
         self.last_save_time = 0.0
         self.last_notification_time = 0.0
+        self.last_recording_time = 0.0
+        self.recording_mode_active = False
+        self.recording_buffer = []
+        self.pending_detection_label = None
+        self.pending_detection_frame = None
 
         self.detector_enabled = True
         self.detector_thread = None
